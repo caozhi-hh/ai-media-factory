@@ -1,0 +1,6 @@
+{
+  "style": "movie",
+  "normalize": true,
+  "denoise": false,
+  "loudness": -23
+}

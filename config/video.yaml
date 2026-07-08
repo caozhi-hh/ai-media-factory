@@ -1,0 +1,14 @@
+# 视频画面配置 —— 听书科普风格(720x960)
+background:
+  source: cogview            # cogview=AI 按文案生成油画风(每分镜一张)
+  dim: 0.0                   # 不压暗(CogView 图 + 黑描边字幕够清楚)
+text:
+  font_size: 46              # 金句字号(模板固定,此项暂保留)
+  color: white
+  position: center
+  line_spacing: 20
+video:
+  width: 720
+  height: 960
+  fps: 30
+watermark: ""   # 不加水印

@@ -1,0 +1,12 @@
+name: Book Workflow
+steps:
+  - research
+  - script
+  - voice
+  - voice_master
+  - storyboard
+  - subtitle
+  - hyperframes
+  - render
+  - qa
+  - publish

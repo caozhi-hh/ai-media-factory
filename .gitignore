@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 密钥(绝不进仓库)
+.env
+
+# 生成产物
+output/*
+!output/.gitkeep
+
+# 用户素材(每个人自己放)
+assets/bgm.aac
+assets/scenes/*
+!assets/scenes/.gitkeep
+
+# 临时/调试文件
+work/
+cache/
+*.mp4
+*.mp3
+*.aac
+*.wav
+
+# 测试调试脚本(保留正式测试)
+tests/_*.py
+
+# 系统
+.DS_Store
+Thumbs.db
+todo.md
+试听配音.py

@@ -1,0 +1,6 @@
+{
+  "style": "podcast",
+  "normalize": true,
+  "denoise": true,
+  "loudness": -19
+}

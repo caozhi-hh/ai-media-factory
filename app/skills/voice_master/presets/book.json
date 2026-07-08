@@ -1,0 +1,6 @@
+{
+  "style": "book",
+  "normalize": true,
+  "denoise": false,
+  "loudness": -16
+}

@@ -1,0 +1,12 @@
+name: History Workflow
+steps:
+  - research
+  - script
+  - voice
+  - voice_master
+  - subtitle
+  - storyboard
+  - hyperframes
+  - render
+  - qa
+  - publish
