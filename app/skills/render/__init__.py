@@ -39,7 +39,7 @@ class RenderSkill(Skill):
     def _segment_vf(self, title, author, watermark, frames):
         vf = (
             "scale=864:1152:force_original_aspect_ratio=increase,crop=864:1152,setsar=1,"
-            f"zoompan=z='min(zoom+0.0008,1.08)':d={frames}:s=720x960:fps=30,"
+            f"zoompan=z='min(zoom+0.0006,1.10)':d={frames}:s=720x960:fps=30,"
             f"drawtext=fontfile='{FONT_BOLD}':text='{_escape(title)}':fontcolor=0xE8DFC8:fontsize=52:borderw=2:bordercolor=0x222222@0.7:x=(w-text_w)/2:y=h*0.06,"
             f"drawtext=fontfile='{FONT}':text='{_escape(author)}':fontcolor=0xC8A858:fontsize=22:borderw=1:bordercolor=0x222222@0.5:x=(w-text_w)/2:y=h*0.06+72"
         )

@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Asset Manager - image gen: free providers first, CogView last resort."""
+"""Asset Manager - image gen: free providers first, CogView last resort.
+
+关键改进:从首个带 visual_style 的 scene 取出统一视觉风格描述,
+拼到每张图的 prompt 前缀,保证 6 张图风格连贯。
+"""
 from pathlib import Path
+
 
 def _remove_watermark(path):
     from PIL import Image, ImageFilter
@@ -17,14 +22,31 @@ def _remove_watermark(path):
         img.paste(blend.crop((x1,y1,x2,y2)),(x1,y1,x2,y2))
     img.save(path, quality=95)
 
+
+def _resolve_visual_style(storyboard):
+    """从第一个带 visual_style 的 scene 中取出统一视觉风格描述。"""
+    if not storyboard:
+        return ""
+    for sc in storyboard:
+        vs = (sc.get("visual_style") or "").strip()
+        if vs:
+            return vs
+    return ""
+
+
 def collect(storyboard, book):
     paths = []
     assets = Path("assets/scenes")
     assets.mkdir(parents=True, exist_ok=True)
+    # 共享视觉风格(由 StoryboardSkill 注入到首个 scene)
+    visual_style = _resolve_visual_style(storyboard)
+    style_prefix = (visual_style + ", ") if visual_style else ""
     for i, sc in enumerate(storyboard or []):
-        prompt = (sc.get("image_prompt") or book) + ", oil painting, cinematic, detailed, no watermark"
+        scene_desc = (sc.get("image_prompt") or book)
+        # 关键:把 visual_style 拼在前面,保证 6 张图风格一致
+        prompt = style_prefix + scene_desc + ", oil painting, cinematic, detailed, no watermark"
         out = str(assets / ("scene_" + str(i) + ".jpg"))
-        # 1. MiniMax (Hailuo) - highest quality, use first
+        # 1. Hailuo (MiniMax) - highest quality, use first
         try:
             from app.providers import minimax_gen
             minimax_gen.generate(prompt, out, size="720x960")

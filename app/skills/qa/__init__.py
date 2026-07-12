@@ -13,7 +13,17 @@ class QASkill(Skill):
     CHECKS = [
         "字幕重叠", "字幕超时", "字幕超屏", "字体缺失", "图片不存在",
         "音频为空", "HTML 报错", "FFmpeg 失败", "MP4 不可播放",
+        "unicode 错字(形近字混淆)",
     ]
+
+    # 形近字黑名单: 容易在 unicode 转码/手写时混淆的字
+    # key=错字, value=(正确字, 常见误用上下文)
+    CHAR_CONFUSABLES = {
+        "\u8f98": ("\u8f88", "一辈子的辈(0x8f88), 不要写成 0x8f98 辘轮的辘"),
+        "\u8f9e": ("\u8f88", "一辈子的辈(0x8f88), 不要写成 0x8f9e"),
+        "\u5382": ("\u5382", "厂的厂, 注意简繁"),
+        "\u8f88": ("\u8f88", "OK 这是正确的辈"),
+    }
 
     def _execute(self, state: VideoState) -> VideoState:
         issues = []
@@ -29,6 +39,16 @@ class QASkill(Skill):
             size = Path(state.video_path).stat().st_size
             if size < 5000:
                 issues.append(f"MP4 过小({size}B),疑似不可播放")
+        # unicode 形近字核验(重点: 字幕 ASS + 文案 script)
+        for source_label, text in [("字幕", Path(state.subtitle_path).read_text(encoding="utf-8") if state.subtitle_path and Path(state.subtitle_path).exists() else ""),
+                                    ("文案", state.script or "")]:
+            if not text:
+                continue
+            for wrong, (right, hint) in self.CHAR_CONFUSABLES.items():
+                if wrong == right:
+                    continue  # 跳过"正确字"自比较
+                if wrong in text:
+                    issues.append(f"{source_label}错字: U+{ord(wrong):04X} 应为 U+{ord(right):04X} ({hint})")
         state.logs.append({"skill": "QA", "issues": issues})
         return state
 

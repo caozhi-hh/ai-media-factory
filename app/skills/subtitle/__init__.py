@@ -78,12 +78,15 @@ def _translate_batch(sentences):
 
 
 def _make_ass(script, total, en_translations=None):
+    """生成 ASS 字幕. 样式分工: 第一句=HOOK(亮金), 末句=END(暖米), 中间=CN(白).
+    详见 prompts/hook_styles.md. HOOK_EN 必须 18pt 防英文超屏."""
     sentences = _split_sentences(script)
     if not sentences:
         sentences = [script[:20]]
     total_chars = sum(len(s) for s in sentences)
     bs = chr(92)
     nl = chr(10)
+    n = len(sentences)
     lines = [
         "[Script Info]",
         "ScriptType: v4.00+",
@@ -94,8 +97,16 @@ def _make_ass(script, total, en_translations=None):
         "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        "Style: CN,Microsoft YaHei UI,42,&H00C2BBA8,&H00C2BBA8,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,3,1,2,40,40,210,1",
-        "Style: EN,Arial,22,&H00A89070,&H00A89070,&H00000000,&H00000000,0,-1,0,0,100,100,0,0,1,2,0,2,40,40,178,1",
+        # CN/EN: 中段正文(白色)
+        "Style: CN,Microsoft YaHei UI,34,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,2.5,0,2,50,50,235,1",
+        "Style: EN,Arial,20,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,0,-1,0,0,100,100,0,0,1,1.5,0,2,50,50,265,1",
+        # HOOK: 钩子句(亮金 0xFFD080, 抓人冲击)
+        "Style: HOOK,Microsoft YaHei UI,34,&H00FFD080,&H00FFD080,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,2.5,0,2,50,50,235,1",
+        # HOOK_EN: 钩子英文(亮金, 缩小到 18pt 防超屏, 不是 20pt)
+        "Style: HOOK_EN,Arial,18,&H00FFD080,&H00FFD080,&H00000000,&H80000000,0,-1,0,0,100,100,0,0,1,1.5,0,2,50,50,265,1",
+        # END: 收尾句(暖米 0xC8E6F5, 比 HOOK 柔, 与金色呼应但不混淆)
+        "Style: END,Microsoft YaHei UI,34,&H00C8E6F5,&H00C8E6F5,&H00000000,&H80000000,-1,0,0,0,100,100,1,0,1,2.5,0,2,50,50,235,1",
+        "Style: END_EN,Arial,18,&H00C8E6F5,&H00C8E6F5,&H00000000,&H80000000,0,-1,0,0,100,100,0,0,1,1.5,0,2,50,50,265,1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -107,12 +118,21 @@ def _make_ass(script, total, en_translations=None):
         st = cur
         en_t = cur + dur
         cur = en_t
-        tag_cn = "{" + bs + "fad(400,150)}"
-        lines.append("Dialogue: 0,%s,%s,CN,,0,0,0,,%s%s" % (_ts(st), _ts(en_t), tag_cn, s))
+        # 样式判定: 第一句=HOOK, 末句=END, 中间=CN
+        if n == 1:
+            cn_style, en_style = "HOOK", "HOOK_EN"
+        elif idx == 0:
+            cn_style, en_style = "HOOK", "HOOK_EN"
+        elif idx == n - 1:
+            cn_style, en_style = "END", "END_EN"
+        else:
+            cn_style, en_style = "CN", "EN"
+        tag_cn = "{" + bs + "fad(280,180)}"
+        lines.append("Dialogue: 0,%s,%s,%s,,0,0,0,,%s%s" % (_ts(st), _ts(en_t), cn_style, tag_cn, s))
         en_text = en_list[idx] if idx < len(en_list) else ""
         if en_text:
-            tag_en = "{" + bs + "fad(500,200)}"
-            lines.append("Dialogue: 0,%s,%s,EN,,0,0,0,,%s%s" % (_ts(st), _ts(en_t), tag_en, en_text))
+            tag_en = "{" + bs + "fad(300,200)" + bs + "i1}"
+            lines.append("Dialogue: 0,%s,%s,%s,,0,0,0,,%s%s" % (_ts(st), _ts(en_t), en_style, tag_en, en_text))
     return nl.join(lines)
 
 

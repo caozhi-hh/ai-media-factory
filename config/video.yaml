@@ -12,3 +12,15 @@ video:
   height: 960
   fps: 30
 watermark: ""   # 不加水印
+
+# 字幕样式表 (详细规则见 prompts/hook_styles.md)
+subtitle_styles:
+  HOOK:       { font: "Microsoft YaHei UI", size: 34, color: "FFD080", bold: true,  desc: "钩子句中文(亮金, 抓人)" }
+  HOOK_EN:    { font: "Arial",             size: 18, color: "FFD080", bold: false, desc: "钩子句英文(亮金, 18pt 防超屏)" }
+  CN:         { font: "Microsoft YaHei UI", size: 34, color: "FFFFFF", bold: true,  desc: "正文中文(白)" }
+  EN:         { font: "Arial",             size: 20, color: "FFFFFF", bold: false, desc: "正文英文(白)" }
+  END:        { font: "Microsoft YaHei UI", size: 34, color: "C8E6F5", bold: true,  desc: "收尾句中文(暖米, 沉淀)" }
+  END_EN:     { font: "Arial",             size: 18, color: "C8E6F5", bold: false, desc: "收尾句英文(暖米)" }
+
+# 钩子句判定: 第一句 = HOOK, 最后一句 = END, 中间全部 = CN
+# 颜色用 RGB 顺序写这里, 生成 ASS 时自动转 BGR
