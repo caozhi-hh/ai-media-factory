@@ -1,8 +1,8 @@
-"""LLM Provider —— MiniMax Text-01 为主, 智谱 glm-4-flash 兜底。
+"""LLM Provider —— 智谱 glm-4.7 (Anthropic端点) 为主, MiniMax-Text-01 兜底。
 
-MiniMax-Text-01 写文案质量高、字数足(200+字), 智谱免费模型做 fallback。
-Research/Script/Storyboard 等共用, 换厂商只改这里。
-Key 从项目根 .env 读。
+glm-4.7 走智谱 Anthropic 兼容端点 (open.bigmodel.cn/api/anthropic),
+文案质量最高。MiniMax-Text-01 作 fallback。
+Key 从项目根 .env 或环境变量读。
 """
 
 import json
@@ -12,11 +12,8 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 
-from openai import OpenAI
-
 
 def _env(name):
-    """从环境变量或 .env 文件读 key."""
     val = os.getenv(name, "").strip()
     if val:
         return val
@@ -29,22 +26,43 @@ def _env(name):
 
 
 # ===== Provider 配置 =====
-_MINIMAX_KEY = _env("MINIMAX_API_KEY")
-_ZHIPU_KEY = _env("ZHIPUAI_API_KEY")
+_ANTHROPIC_KEY = _env("ANTHROPIC_API_KEY")
+_ANTHROPIC_URL = (_env("ANTHROPIC_BASE_URL") or "https://open.bigmodel.cn/api/anthropic").rstrip("/") + "/v1/messages"
+_ANTHROPIC_MODEL = "claude-sonnet-4-20250514"  # 映射到 glm-4.7
 
-# MiniMax (主): 文案质量高, 字数足
+_MINIMAX_KEY = _env("MINIMAX_API_KEY")
 _MINIMAX_URL = "https://api.minimaxi.com/v1/text/chatcompletion_v2"
 _MINIMAX_MODEL = "MiniMax-Text-01"
 
-# 智谱 (兜底): OpenAI 兼容协议, glm-4-flash 免费
-_zhipu_client = None
-if _ZHIPU_KEY:
-    _zhipu_client = OpenAI(api_key=_ZHIPU_KEY, base_url="https://open.bigmodel.cn/api/paas/v4")
-_ZHIPU_MODEL = "glm-4-flash"
+
+def _anthropic_chat(prompt, system):
+    """调用智谱 Anthropic 兼容端点 (glm-4.7)."""
+    body = {
+        "model": _ANTHROPIC_MODEL,
+        "max_tokens": 2048,
+        "system": system,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    req = urllib.request.Request(
+        _ANTHROPIC_URL,
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "x-api-key": _ANTHROPIC_KEY,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        },
+    )
+    resp = urllib.request.urlopen(req, timeout=90)
+    data = json.loads(resp.read().decode("utf-8"))
+    blocks = data.get("content", [])
+    texts = [b.get("text", "") for b in blocks if b.get("type") == "text"]
+    if not texts:
+        raise RuntimeError("Anthropic endpoint returned no text: %s" % str(data)[:200])
+    return "\n".join(texts).strip()
 
 
-def _minimax_chat(prompt: str, system: str) -> str:
-    """调用 MiniMax chatcompletion_v2 (类 OpenAI 协议)."""
+def _minimax_chat(prompt, system):
+    """调用 MiniMax chatcompletion_v2."""
     body = {
         "model": _MINIMAX_MODEL,
         "messages": [
@@ -61,48 +79,35 @@ def _minimax_chat(prompt: str, system: str) -> str:
     data = json.loads(resp.read().decode("utf-8"))
     if data.get("base_resp", {}).get("status_code", -1) != 0:
         raise RuntimeError("MiniMax error: %s" % json.dumps(data.get("base_resp", {}), ensure_ascii=False)[:200])
-    choices = data.get("choices", [])
-    if not choices:
-        raise RuntimeError("MiniMax no choices")
-    return choices[0]["message"]["content"].strip()
+    return data["choices"][0]["message"]["content"].strip()
 
 
-def _zhipu_chat(prompt: str, system: str) -> str:
-    """调用智谱 glm-4-flash (OpenAI 兼容)."""
-    if not _zhipu_client:
-        raise RuntimeError("ZHIPUAI_API_KEY 未配置")
-    resp = _zhipu_client.chat.completions.create(
-        model=_ZHIPU_MODEL,
-        messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}],
-    )
-    return resp.choices[0].message.content.strip()
-
-
-def chat(prompt: str, system: str = "你是助手,用中文回答。") -> str:
-    """主用 MiniMax-Text-01, 失败回退智谱 glm-4-flash."""
+def chat(prompt, system="你是助手,用中文回答。"):
+    """优先 glm-4.7 (Anthropic端点), 失败回退 MiniMax-Text-01."""
+    if _ANTHROPIC_KEY:
+        try:
+            return _anthropic_chat(prompt, system)
+        except Exception as e:
+            print("  [LLM] Anthropic/glm-4.7 failed (%s), trying MiniMax..." % str(e)[:80])
     if _MINIMAX_KEY:
         try:
             return _minimax_chat(prompt, system)
         except Exception as e:
-            print("  [LLM] MiniMax failed (%s), falling back to Zhipu..." % str(e)[:80])
-    if _zhipu_client:
-        return _zhipu_chat(prompt, system)
-    raise RuntimeError("没有可用的 LLM key (MINIMAX_API_KEY / ZHIPUAI_API_KEY 都没配)")
+            print("  [LLM] MiniMax failed (%s)" % str(e)[:80])
+    raise RuntimeError("没有可用的 LLM (需 ANTHROPIC_API_KEY 或 MINIMAX_API_KEY)")
 
 
-def chat_json(prompt: str, system: str = "严格只输出 JSON。") -> dict:
-    """要求 LLM 输出 JSON 对象,容错提取首个 {...}。"""
+def chat_json(prompt, system="严格只输出 JSON。"):
     text = chat(prompt, system)
     m = re.search(r"\{.*\}", text, re.DOTALL)
     if not m:
-        raise ValueError(f"LLM 没返回 JSON 对象:{text[:200]}")
+        raise ValueError("LLM 没返回 JSON 对象: %s" % text[:200])
     return json.loads(m.group(0))
 
 
-def chat_list(prompt: str, system: str = "严格只输出 JSON 数组。") -> list:
-    """要求 LLM 输出 JSON 数组,容错提取首个 [...]."""
+def chat_list(prompt, system="严格只输出 JSON 数组。"):
     text = chat(prompt, system)
     m = re.search(r"\[.*\]", text, re.DOTALL)
     if not m:
-        raise ValueError(f"LLM 没返回 JSON 数组:{text[:200]}")
+        raise ValueError("LLM 没返回 JSON 数组: %s" % text[:200])
     return json.loads(m.group(0))
