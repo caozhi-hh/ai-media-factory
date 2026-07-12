@@ -57,7 +57,13 @@ class RenderSkill(Skill):
         seg = dur / n
         frames = max(int(seg * 30), 1)
         title = f"\u300a{state.book}\u300b"
-        author = ((state.research or {}).get("author", "") + "/著").strip("/") or "无名/著"
+        # 容错: author 可能是 dict/str/list, 一律展平成字符串
+        _raw_author = (state.research or {}).get("author", "")
+        if isinstance(_raw_author, dict):
+            _raw_author = _raw_author.get("name") or _raw_author.get("author") or str(_raw_author)
+        elif not isinstance(_raw_author, str):
+            _raw_author = str(_raw_author) if _raw_author else ""
+        author = (_raw_author + "/著").strip("/") or "无名/著"
 
         segs = []
         for i, sc in enumerate(scenes):

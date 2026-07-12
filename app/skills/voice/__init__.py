@@ -5,6 +5,7 @@ Falls back to edge_tts if volcengine has transient SSL/network errors.
 
 import asyncio
 import time
+from pathlib import Path
 
 from app.core.skill import Skill
 from app.core.state import VideoState
@@ -49,6 +50,34 @@ class VoiceSkill(Skill):
                 asyncio.run(
                     edge_tts.Communicate(state.script, fallback, rate=rate, volume=volume_tts).save(path)
                 )
+
+        # 后处理: 如果音频超过 target_duration, 用 ffmpeg atempo 压缩到目标时长
+        target_dur = cfg.get("target_duration", 0)
+        if target_dur and target_dur > 0:
+            import imageio_ffmpeg, subprocess, re
+            exe = imageio_ffmpeg.get_ffmpeg_exe()
+            r = subprocess.run([exe, "-i", path], capture_output=True, text=True)
+            m = re.search(r"Duration:[ \t]*(\d+):(\d+):(\d+)\.(\d+)", r.stderr)
+            if m:
+                cur_dur = int(m.group(1))*3600+int(m.group(2))*60+int(m.group(3))+int(m.group(4))/100
+                if cur_dur > target_dur + 0.5:  # 超过 0.5s 才压缩
+                    ratio = cur_dur / target_dur
+                    # atempo 范围 0.5-2.0, 超过需要链式
+                    filters = []
+                    r2 = ratio
+                    while r2 > 2.0:
+                        filters.append("atempo=2.0")
+                        r2 /= 2.0
+                    while r2 < 0.5:
+                        filters.append("atempo=0.5")
+                        r2 *= 2.0
+                    filters.append(f"atempo={r2:.3f}")
+                    af = ",".join(filters)
+                    tmp = path + ".tmp.mp3"
+                    subprocess.run([exe, "-y", "-i", path, "-af", af, "-c:a", "libmp3lame", tmp],
+                                   capture_output=True, check=True)
+                    Path(tmp).replace(path)
+                    print(f"  [Voice] 音频压缩: {cur_dur:.1f}s -> ~{target_dur:.1f}s (ratio={ratio:.2f})")
         else:
             import edge_tts
             voice = cfg.get("model", "zh-CN-YunxiNeural")
