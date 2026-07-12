@@ -27,6 +27,11 @@ def _split_sentences(script):
     引号包裹的段落 (中文""/英文"")整段保留, 不按逗号切."""
     if not script:
         return []
+    # 防御: 清理可能残留的 markdown 标记 (代码块/加粗/列表符)
+    import re as _mdre
+    script = _mdre.sub(r"```[a-z]*\n?", "", script).replace("```", "")
+    script = _mdre.sub(r"\\*\\*(.+?)\\*\\*", r"\1", script)
+    script = _mdre.sub(r"^\\s*[-*]\\s+", "", script, flags=_mdre.MULTILINE)
     DQ = chr(34)  # ASCII 双引号
     Q_OPEN = chr(0x201c) + chr(0x201d) + DQ + chr(0x300a) + chr(0x3010)
     Q_CLOSE = chr(0x201d) + chr(0x201d) + DQ + chr(0x300b) + chr(0x3011)
@@ -164,6 +169,22 @@ def _make_ass(script, total, en_translations=None):
         else:
             cn_style, en_style = "CN", "EN"
         tag_cn = "{" + bs + "fad(280,180)}"
+        # 字数上限保护: CN 单句 > 16 字自动折行 (ASS 用 \N 软换行, 防超屏)
+        if len(s) > 16:
+            # 按逗号位置折行: parts=["前半","，","后半"], 逗号=parts[1]
+            import re as _re
+            parts = _re.split(r"([，,；;])", s)
+            if len(parts) >= 3:
+                line1 = parts[0] + parts[1]
+                line2 = "".join(parts[2:])
+                if len(line2) > 16:
+                    p2 = _re.split(r"([，,；;])", line2)
+                    if len(p2) >= 3:
+                        line2 = p2[0] + p2[1] + chr(92) + "N" + "".join(p2[2:])
+                s = line1 + chr(92) + "N" + line2 if line2.strip() else s
+            else:
+                mid = len(s) // 2
+                s = s[:mid] + chr(92) + "N" + s[mid:]
         lines.append("Dialogue: 0,%s,%s,%s,,0,0,0,,%s%s" % (_ts(st), _ts(en_t), cn_style, tag_cn, s))
         en_text = en_list[idx] if idx < len(en_list) else ""
         if en_text:

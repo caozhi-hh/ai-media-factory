@@ -44,7 +44,7 @@ def collect(storyboard, book):
     for i, sc in enumerate(storyboard or []):
         scene_desc = (sc.get("image_prompt") or book)
         # 关键:把 visual_style 拼在前面,保证 6 张图风格一致
-        prompt = style_prefix + scene_desc + ", oil painting, cinematic, detailed, no watermark"
+        prompt = style_prefix + scene_desc + ", no text, no watermark, no real photo"
         out = str(assets / ("scene_" + str(i) + ".jpg"))
         # 1. Hailuo (MiniMax) - highest quality, use first
         try:
