@@ -23,30 +23,54 @@ def _dur(path):
 
 
 def _split_sentences(script):
-    parts = re.split(r"[\u3002\uff1f\uff01!?]", script)
+    """切分口播稿. 优先级: \\n 段落 > 句末标点 > 逗号/分号.
+    会自动 strip 段首尾的引号/书名号, 避免标点单独成段."""
+    if not script:
+        return []
+    # 0. 先清理: 去掉每个 \n 段落首尾的引号/书名号
+    Q_OPEN = "\u201c\u300a\u3010"   # 中文左右引号 + 书名号 + 标题号
+    Q_CLOSE = "\u201d\u300b\u3011"
+    paras = []
+    for seg in script.splitlines():
+        seg = seg.strip()
+        # 去掉首尾的引号/书名号包裹 (但保留句内书名号)
+        while seg and seg[0] in Q_OPEN:
+            seg = seg[1:].strip()
+        while seg and seg[-1] in Q_CLOSE:
+            seg = seg[:-1].strip()
+        if seg:
+            paras.append(seg)
+    if not paras:
+        return [script[:20]]
     result = []
-    for p in parts:
-        p = p.strip()
-        if not p:
-            continue
-        if len(p) > 16:
-            subs = re.split(r"[\uff0c,\uff1b;]", p)
-            cur = ""
-            for s2 in subs:
-                s2 = s2.strip()
-                if not s2:
-                    continue
-                if cur and len(cur) + len(s2) > 16:
+    for para in paras:
+        # 1. 段内按句末标点切 (lookbehind 保留标点)
+        sentences = re.split(r"(?<=[\u3002\uff1f\uff01!?])", para)
+        for s in sentences:
+            s = s.strip()
+            if not s:
+                continue
+            if len(s) > 18:
+                # 2. 单句太长, 按逗号/分号切
+                subs = re.split(r"[\uff0c,\uff1b;]", s)
+                cur = ""
+                for s2 in subs:
+                    s2 = s2.strip()
+                    if not s2:
+                        continue
+                    if cur and len(cur) + len(s2) > 18:
+                        result.append(cur)
+                        cur = s2
+                    else:
+                        cur = (cur + "," + s2) if cur else s2
+                if cur:
                     result.append(cur)
-                    cur = s2
-                else:
-                    cur = (cur + "," + s2) if cur else s2
-            if cur:
-                result.append(cur)
-        else:
-            result.append(p)
+            else:
+                # 过滤纯标点/引号段 (避免 "\"" 单独成段拿走 END 样式)
+                if re.fullmatch(r"[\s\u3000-\u303f\u2018-\u201f\u300a-\u3011\u2014\u2026]+", s):
+                    continue
+                result.append(s)
     return result
-
 
 def _translate_batch(sentences):
     """Batch translate CN sentences to EN via LLM."""
