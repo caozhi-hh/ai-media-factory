@@ -23,52 +23,63 @@ def _dur(path):
 
 
 def _split_sentences(script):
-    """切分口播稿. 优先级: \\n 段落 > 句末标点 > 逗号/分号.
-    会自动 strip 段首尾的引号/书名号, 避免标点单独成段."""
+    """切分口播稿. 优先级: \n 段落 > 句末标点 > 逗号.
+    引号包裹的段落 (中文""/英文"")整段保留, 不按逗号切."""
     if not script:
         return []
-    # 0. 先清理: 去掉每个 \n 段落首尾的引号/书名号
-    Q_OPEN = "\u201c\u300a\u3010"   # 中文左右引号 + 书名号 + 标题号
-    Q_CLOSE = "\u201d\u300b\u3011"
+    DQ = chr(34)  # ASCII 双引号
+    Q_OPEN = chr(0x201c) + chr(0x201d) + DQ + chr(0x300a) + chr(0x3010)
+    Q_CLOSE = chr(0x201d) + chr(0x201d) + DQ + chr(0x300b) + chr(0x3011)
     paras = []
     for seg in script.splitlines():
         seg = seg.strip()
-        # 去掉首尾的引号/书名号包裹 (但保留句内书名号)
+        # 先检测引号包裹 (在 strip 之前)
+        has_cn = chr(0x201c) in seg and chr(0x201d) in seg
+        has_en = DQ in seg and seg.count(DQ) >= 2
+        is_q = has_cn or has_en
+        # 再 strip 首尾引号/书名号
         while seg and seg[0] in Q_OPEN:
             seg = seg[1:].strip()
         while seg and seg[-1] in Q_CLOSE:
             seg = seg[:-1].strip()
         if seg:
-            paras.append(seg)
+            paras.append((seg, is_q))
     if not paras:
         return [script[:20]]
     result = []
-    for para in paras:
-        # 1. 段内按句末标点切 (lookbehind 保留标点)
+    for para, is_q in paras:
         sentences = re.split(r"(?<=[\u3002\uff1f\uff01!?])", para)
         for s in sentences:
             s = s.strip()
             if not s:
                 continue
-            if len(s) > 18:
-                # 2. 单句太长, 按逗号/分号切
-                subs = re.split(r"[\uff0c,\uff1b;]", s)
+            # 过滤纯标点/引号段
+            if re.fullmatch(r"[\s\u3000-\u303f\u2018-\u201f\u300a-\u3011\u2014\u2026\"\u201c\u201d]+", s):
+                continue
+            # 切分条件: 非引文 + 单句 > 22 字 + 含逗号
+            if not is_q and len(s) > 22 and re.search(r"[\uff0c,\uff1b;]", s):
+                subs = re.split(r"([\uff0c,\uff1b;])", s)
+                chunks = []
                 cur = ""
-                for s2 in subs:
-                    s2 = s2.strip()
-                    if not s2:
-                        continue
-                    if cur and len(cur) + len(s2) > 18:
-                        result.append(cur)
-                        cur = s2
+                for sub in subs:
+                    if sub in "\uff0c,\uff1b;":
+                        cur += sub
+                        if cur.strip():
+                            chunks.append(cur)
+                        cur = ""
                     else:
-                        cur = (cur + "," + s2) if cur else s2
-                if cur:
-                    result.append(cur)
+                        cur += sub
+                if cur.strip():
+                    chunks.append(cur)
+                # 合并过短 chunks
+                merged = []
+                for c in chunks:
+                    if merged and len(merged[-1]) < 10:
+                        merged[-1] += c
+                    else:
+                        merged.append(c)
+                result.extend(merged)
             else:
-                # 过滤纯标点/引号段 (避免 "\"" 单独成段拿走 END 样式)
-                if re.fullmatch(r"[\s\u3000-\u303f\u2018-\u201f\u300a-\u3011\u2014\u2026]+", s):
-                    continue
                 result.append(s)
     return result
 
@@ -81,10 +92,11 @@ def _translate_batch(sentences):
               "Keep them concise and emotional (for a book trailer). "
               "Output ONLY the English, one line each, same order, numbered:\n" + joined)
     try:
-        text = llm.chat(prompt, system="You are a literary translator. Output English only, numbered list.")
+        text = llm.chat(prompt, system="You are a literary translator. Output ONLY the English translations, one per line, NO numbering, NO bullets, NO quotes.")
         results = []
         for line in text.strip().splitlines():
-            m = re.match(r"\s*\d+[\.\)]\s*(.+)", line.strip())
+            # 兼容 LLM 可能加的 "1. " / "1) " 编号, 也兼容纯文本
+            m = re.match(r"\s*(?:\d+[\.\)]\s*)?(.+)", line.strip())
             if m:
                 results.append(m.group(1).strip())
         if len(results) == len(sentences):

@@ -8,7 +8,7 @@ provider: volcengine
 #   zh_male_qingxinkuaiyi_moon_bigtts   阳光青年2.0
 # speed_ratio: 0.5~2.0, 1.0=正常
 model: zh_male_shenyeboke_uranus_bigtts
-speed_ratio: 1.1
+speed_ratio: 0.95  # 放慢, 让 30s 视频从容 (原 1.1 太快)
 volume_ratio: 1.0
 
 # ===== edge_tts 备选(把 provider 改成 edge_tts 时用) =====
